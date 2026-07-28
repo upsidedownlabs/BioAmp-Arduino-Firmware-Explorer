@@ -365,12 +365,55 @@
       });
   }
 
-  function renderMarkdownHtml(text) {
-    if (window.marked && window.DOMPurify) {
-      return window.DOMPurify.sanitize(window.marked.parse(text));
+  // Turns a path written relative to `fromDir` into one relative to the repo
+  // root, collapsing "." and ".." along the way. A leading "/" is read as
+  // repo-root-relative, which is how GitHub treats it in a README.
+  function resolveRepoPath(fromDir, target) {
+    var segments = target.charAt(0) === "/" ? [] : fromDir.split("/").filter(Boolean);
+    target.split("/").forEach(function (seg) {
+      if (!seg || seg === ".") return;
+      if (seg === "..") segments.pop();
+      else segments.push(seg);
+    });
+    return segments.map(function (seg) {
+      // Authors write these either encoded ("my%20photo.png") or raw
+      // ("my photo.png"); decoding first keeps the encode from doubling up.
+      var decoded = seg;
+      try { decoded = decodeURIComponent(seg); } catch (e) {}
+      return encodeURIComponent(decoded);
+    }).join("/");
+  }
+
+  // Markdown images are written relative to the file holding them, so on their
+  // own they'd resolve against this page's origin instead of the repo.
+  function rewriteRelativeImages(root, mdPath) {
+    var dir = mdPath.indexOf("/") === -1 ? "" : mdPath.slice(0, mdPath.lastIndexOf("/"));
+    var imgs = root.querySelectorAll("img[src]");
+    for (var i = 0; i < imgs.length; i++) {
+      var src = imgs[i].getAttribute("src") || "";
+      // Absolute URLs, protocol-relative URLs and data: URIs already work.
+      if (/^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(src)) continue;
+      var bare = src.split(/[?#]/)[0]; // "logo.png?raw=true" -> "logo.png"
+      if (!bare) continue;
+      imgs[i].setAttribute("src", RAW_BASE + resolveRepoPath(dir, bare));
     }
-    // Without both libraries, never inject unsanitized HTML — fall back to plain text.
-    return "<pre>" + escapeHtml(text) + "</pre>";
+  }
+
+  function renderMarkdownInto(el, text, mdPath) {
+    el.textContent = "";
+    if (!(window.marked && window.DOMPurify)) {
+      // Without both libraries, never inject unsanitized HTML — plain text only.
+      var pre = document.createElement("pre");
+      pre.textContent = text;
+      el.appendChild(pre);
+      return;
+    }
+    // Sanitize to a fragment rather than a string so the image sources can be
+    // corrected before the nodes enter the page — no request ever goes out
+    // for the unresolved path.
+    var frag = window.DOMPurify.sanitize(window.marked.parse(text), { RETURN_DOM_FRAGMENT: true });
+    rewriteRelativeImages(frag, mdPath);
+    el.appendChild(frag);
   }
 
   function renderFile(name, path, text) {
@@ -442,7 +485,7 @@
       var showRendered = isMarkdown && mode === "view";
 
       if (previewEl) {
-        if (showRendered) previewEl.innerHTML = renderMarkdownHtml(getCurrentText());
+        if (showRendered) renderMarkdownInto(previewEl, getCurrentText(), path);
         previewEl.style.display = showRendered ? "block" : "none";
       }
 
