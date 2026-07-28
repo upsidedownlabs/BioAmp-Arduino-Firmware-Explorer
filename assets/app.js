@@ -365,9 +365,24 @@
       });
   }
 
+  // Absolute URLs, protocol-relative URLs, data: URIs and bare fragments all
+  // work as written; only repo-relative ones need re-pointing.
+  function isRelativeUrl(url) {
+    return !!url && !/^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(url);
+  }
+
+  function dirOf(path) {
+    return path.indexOf("/") === -1 ? "" : path.slice(0, path.lastIndexOf("/"));
+  }
+
+  function encodePath(path) {
+    return path.split("/").map(encodeURIComponent).join("/");
+  }
+
   // Turns a path written relative to `fromDir` into one relative to the repo
   // root, collapsing "." and ".." along the way. A leading "/" is read as
-  // repo-root-relative, which is how GitHub treats it in a README.
+  // repo-root-relative, which is how GitHub treats it in a README. The result
+  // is a literal path, matching how the git tree lists it.
   function resolveRepoPath(fromDir, target) {
     var segments = target.charAt(0) === "/" ? [] : fromDir.split("/").filter(Boolean);
     target.split("/").forEach(function (seg) {
@@ -377,25 +392,26 @@
     });
     return segments.map(function (seg) {
       // Authors write these either encoded ("my%20photo.png") or raw
-      // ("my photo.png"); decoding first keeps the encode from doubling up.
-      var decoded = seg;
-      try { decoded = decodeURIComponent(seg); } catch (e) {}
-      return encodeURIComponent(decoded);
+      // ("my photo.png"); decoding normalizes both to the literal name.
+      try { return decodeURIComponent(seg); } catch (e) { return seg; }
     }).join("/");
+  }
+
+  function rawUrlFor(fromDir, target) {
+    return RAW_BASE + encodePath(resolveRepoPath(fromDir, target));
   }
 
   // Markdown images are written relative to the file holding them, so on their
   // own they'd resolve against this page's origin instead of the repo.
   function rewriteRelativeImages(root, mdPath) {
-    var dir = mdPath.indexOf("/") === -1 ? "" : mdPath.slice(0, mdPath.lastIndexOf("/"));
+    var dir = dirOf(mdPath);
     var imgs = root.querySelectorAll("img[src]");
     for (var i = 0; i < imgs.length; i++) {
       var src = imgs[i].getAttribute("src") || "";
-      // Absolute URLs, protocol-relative URLs and data: URIs already work.
-      if (/^([a-z][a-z0-9+.-]*:|\/\/|#)/i.test(src)) continue;
+      if (!isRelativeUrl(src)) continue;
       var bare = src.split(/[?#]/)[0]; // "logo.png?raw=true" -> "logo.png"
       if (!bare) continue;
-      imgs[i].setAttribute("src", RAW_BASE + resolveRepoPath(dir, bare));
+      imgs[i].setAttribute("src", rawUrlFor(dir, bare));
     }
   }
 
@@ -416,9 +432,131 @@
     el.appendChild(frag);
   }
 
+  // ---------- Live web-app preview ----------
+  //
+  // raw.githubusercontent.com serves every file as "text/plain" with
+  // X-Content-Type-Options: nosniff, so an iframe can't simply point at a
+  // repo's index.html — the browser refuses to treat it as HTML, and refuses
+  // to apply the stylesheets or run the scripts it links. The document is
+  // therefore reassembled here: a <base> tag re-points everything that raw
+  // *can* still serve (images, media, fetch/XHR), and the CSS and JS that MIME
+  // enforcement would reject get inlined out of the same cache the file
+  // viewer already fills by prefetching the repo.
+  //
+  // The result runs in a sandboxed frame with no allow-same-origin, so the
+  // repo's code gets an opaque origin: it cannot touch this page, its storage,
+  // or its DOM. That isolation is the point — never add allow-same-origin,
+  // which would hand arbitrary repo JS full control of the explorer.
+
+  var APP_SANDBOX = "allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock";
+  // Hardware permissions these firmware apps tend to reach for. The frame stays
+  // cross-origin, so a browser may refuse them anyway; the app's own capability
+  // check is then what the visitor sees.
+  var APP_ALLOW = "serial; usb; hid; bluetooth; midi; accelerometer; gyroscope; camera; microphone";
+
+  function isHtmlFile(name) {
+    var e = ext(name);
+    return e === "html" || e === "htm";
+  }
+
+  // The opaque origin that makes the frame safe also makes touching
+  // localStorage throw a SecurityError — enough to kill an app on its first
+  // line. This stand-in keeps those apps running; whatever they store lasts
+  // only as long as the preview. It reaches the frame via toString(), so it
+  // has to stay self-contained ES5.
+  function installStorageShim() {
+    function memoryStorage() {
+      var data = {};
+      return {
+        getItem: function (k) { return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+        setItem: function (k, v) { data[k] = String(v); },
+        removeItem: function (k) { delete data[k]; },
+        clear: function () { data = {}; },
+        key: function (i) { return Object.keys(data)[i] || null; },
+        get length() { return Object.keys(data).length; }
+      };
+    }
+    ["localStorage", "sessionStorage"].forEach(function (name) {
+      try {
+        window[name].getItem("probe");
+      } catch (blocked) {
+        try {
+          Object.defineProperty(window, name, { value: memoryStorage(), configurable: true });
+        } catch (ignored) {}
+      }
+    });
+  }
+
+  // An inlined stylesheet's url() references were written relative to the CSS
+  // file, not to the page, so they have to be resolved before the <base> gets
+  // a chance to resolve them against the wrong directory.
+  function rewriteCssUrls(css, cssDir) {
+    return css.replace(/url\(\s*(['"]?)([^'")]+?)\1\s*\)/gi, function (whole, quote, target) {
+      if (!isRelativeUrl(target)) return whole;
+      var bare = target.split(/[?#]/)[0];
+      return bare ? "url(" + quote + rawUrlFor(cssDir, bare) + quote + ")" : whole;
+    });
+  }
+
+  function inlineAssets(doc, dir, selector, urlAttr, replaceWith) {
+    var tags = doc.querySelectorAll(selector);
+    var jobs = [];
+    Array.prototype.forEach.call(tags, function (tag) {
+      var url = tag.getAttribute(urlAttr);
+      if (!isRelativeUrl(url)) return;
+      var assetPath = resolveRepoPath(dir, url.split(/[?#]/)[0]);
+      jobs.push(
+        fetchFileContent(assetPath).then(function (content) {
+          tag.parentNode.replaceChild(replaceWith(doc, tag, content, assetPath), tag);
+        }, function () {
+          // Leave the original tag in place; the frame just loses that asset.
+        })
+      );
+    });
+    return jobs;
+  }
+
+  function buildAppDocument(htmlText, htmlPath) {
+    var dir = dirOf(htmlPath);
+    // A DOMParser document is inert: nothing loads and no script runs until
+    // the serialized result is handed to the frame.
+    var doc = new DOMParser().parseFromString(htmlText, "text/html");
+
+    Array.prototype.forEach.call(doc.querySelectorAll("base"), function (tag) {
+      tag.parentNode.removeChild(tag);
+    });
+    var base = doc.createElement("base");
+    base.setAttribute("href", RAW_BASE + (dir ? encodePath(dir) + "/" : ""));
+    doc.head.insertBefore(base, doc.head.firstChild);
+
+    var shim = doc.createElement("script");
+    shim.textContent = "(" + installStorageShim + ")();";
+    doc.head.insertBefore(shim, base.nextSibling);
+
+    var jobs = inlineAssets(doc, dir, 'link[rel~="stylesheet"][href]', "href", function (d, tag, css, p) {
+      var style = d.createElement("style");
+      style.textContent = rewriteCssUrls(css, dirOf(p));
+      return style;
+    }).concat(
+      inlineAssets(doc, dir, "script[src]", "src", function (d, tag, js) {
+        var inline = d.createElement("script");
+        if (tag.getAttribute("type")) inline.setAttribute("type", tag.getAttribute("type"));
+        // A literal </script> inside a string would close the tag early once
+        // this document is serialized back to text.
+        inline.textContent = js.replace(/<\/script/gi, "<\\/script");
+        return inline;
+      })
+    );
+
+    return Promise.all(jobs).then(function () {
+      return "<!doctype html>\n" + doc.documentElement.outerHTML;
+    });
+  }
+
   function renderFile(name, path, text) {
     var lang = LANG_MAP[ext(name)] || "plaintext";
     var isMarkdown = lang === "markdown";
+    var isHtml = isHtmlFile(name);
     var lines = text.split("\n").length;
     var sizeKb = (new Blob([text]).size / 1024).toFixed(1);
 
@@ -435,6 +573,11 @@
       pathHeaderHtml(path, actionsHtml) +
       '<textarea id="editBlock" class="code-edit" spellcheck="false"></textarea>' +
       (isMarkdown ? '<div class="md-preview" id="mdPreview"></div>' : "") +
+      (isHtml
+        ? '<div class="loading-msg" id="appStatus"></div>' +
+          '<iframe id="appFrame" class="app-frame" title="' + escapeHtml(name) + ' preview"' +
+          ' sandbox="' + APP_SANDBOX + '" allow="' + APP_ALLOW + '" referrerpolicy="no-referrer"></iframe>'
+        : "") +
       "</div>";
 
     var filePanelEl = document.getElementById("filePanel");
@@ -442,6 +585,8 @@
     var viewBtn = document.getElementById("viewModeBtn");
     var editBtn = document.getElementById("editModeBtn");
     var previewEl = document.getElementById("mdPreview");
+    var appFrameEl = document.getElementById("appFrame");
+    var appStatusEl = document.getElementById("appStatus");
     var copyBtn = document.getElementById("copyBtn");
     var mode = "view"; // "view" | "edit"
     var cm = null;
@@ -474,30 +619,66 @@
       return cm ? cm.getValue() : editEl.value;
     }
 
+    // Rebuilt only when the source actually differs, so flipping to Edit and
+    // back leaves a running app alone rather than restarting it.
+    var runningSource = null;
+
+    function startApp() {
+      var source = getCurrentText();
+      if (runningSource === source) return;
+      runningSource = source;
+      appFrameEl.removeAttribute("srcdoc");
+      appStatusEl.textContent = "Starting app…";
+      appStatusEl.style.display = "block";
+      buildAppDocument(source, path).then(
+        function (html) {
+          if (!appFrameEl.isConnected || runningSource !== source) return;
+          appFrameEl.setAttribute("srcdoc", html);
+          appStatusEl.style.display = "none";
+        },
+        function (err) {
+          if (!appFrameEl.isConnected || runningSource !== source) return;
+          runningSource = null; // let a later switch retry
+          appStatusEl.textContent = "Could not start the app (" + err.message + ").";
+        }
+      );
+    }
+
     function setMode(next) {
       mode = next;
       viewBtn.classList.toggle("active", mode === "view");
       editBtn.classList.toggle("active", mode === "edit");
       filePanelEl.classList.toggle("editing", mode === "edit");
 
-      // Markdown reads as a rendered document in View and as source in Edit.
-      // Every other type keeps the same editor in both modes.
+      // Markdown reads as a rendered document in View and HTML runs as a live
+      // app; both show their source in Edit. Every other type keeps the same
+      // editor in both modes.
       var showRendered = isMarkdown && mode === "view";
+      var showApp = isHtml && mode === "view";
+      var showEditor = !showRendered && !showApp;
+
+      filePanelEl.classList.toggle("running-app", showApp);
 
       if (previewEl) {
         if (showRendered) renderMarkdownInto(previewEl, getCurrentText(), path);
         previewEl.style.display = showRendered ? "block" : "none";
       }
 
+      if (appFrameEl) {
+        appFrameEl.style.display = showApp ? "block" : "none";
+        if (showApp) startApp();
+        else appStatusEl.style.display = "none";
+      }
+
       if (cm) {
-        cm.getWrapperElement().style.display = showRendered ? "none" : "block";
-        if (!showRendered) cm.refresh(); // remeasure after being hidden
+        cm.getWrapperElement().style.display = showEditor ? "block" : "none";
+        if (showEditor) cm.refresh(); // remeasure after being hidden
         // Only flip editability. No focus()/setCursor() call here — either
         // one plants a caret and can scroll the view to it. The cursor
         // should not exist anywhere until the user actually clicks in.
         cm.setOption("readOnly", mode === "edit" ? false : "nocursor");
       } else {
-        editEl.style.display = showRendered ? "none" : "block";
+        editEl.style.display = showEditor ? "block" : "none";
         editEl.readOnly = mode !== "edit";
       }
     }

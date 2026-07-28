@@ -613,6 +613,26 @@ body {
   border: var(--hairline) solid var(--border);
 }
 
+/* ---------- Live web-app preview ---------- */
+
+/* Only while an app is on screen: the panel becomes a column so the frame can
+   take exactly the room left under the sticky header, and the app scrolls
+   inside itself. Code files keep their normal document scrolling. */
+.file-panel.running-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.app-frame {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: none;
+  background: #ffffff;
+}
+
 .binary-notice {
   padding: 2rem;
   text-align: center;
