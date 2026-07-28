@@ -338,33 +338,6 @@ body {
   font-weight: bold;
 }
 
-/* Markdown-only: sits directly beside the file name */
-.preview-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  background: transparent;
-  color: var(--accent);
-  border: var(--hairline) solid var(--accent);
-  border-radius: 0.375rem;
-  padding: 0.25rem 0.6rem;
-  font-family: var(--font);
-  font-size: 0.78rem;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.preview-btn:hover {
-  background: var(--accent-wash);
-}
-
-.preview-btn.active {
-  background: var(--accent);
-  color: var(--void);
-  font-weight: bold;
-}
-
 .file-panel-actions {
   display: flex;
   align-items: center;

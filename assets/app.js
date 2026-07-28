@@ -33,8 +33,7 @@
     copy: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
     check: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',
     eye: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>',
-    pencil: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>',
-    preview: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>'
+    pencil: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>'
   };
 
   function formatTitle(str) {
@@ -278,12 +277,11 @@
 
   // ---------- File viewer ----------
 
-  function pathHeaderHtml(path, actionsHtml, besideNameHtml) {
+  function pathHeaderHtml(path, actionsHtml) {
     return (
       '<div class="file-panel-header">' +
       '<div class="file-title-group">' +
       '<span class="file-path" title="' + escapeHtml(path) + '">' + escapeHtml(path) + "</span>" +
-      (besideNameHtml || "") +
       "</div>" +
       (actionsHtml ? '<div class="file-panel-actions">' + actionsHtml + "</div>" : "") +
       "</div>"
@@ -389,15 +387,9 @@
       "</div>" +
       '<button class="copy-btn" id="copyBtn">' + ICONS.copy + "<span>Copy</span></button>";
 
-    // For markdown, Preview sits beside the file name rather than in the
-    // View/Edit toggle group.
-    var besideNameHtml = isMarkdown
-      ? '<button type="button" class="preview-btn" id="previewModeBtn">' + ICONS.preview + "<span>Preview</span></button>"
-      : "";
-
     contentEl.innerHTML =
       '<div class="file-panel" id="filePanel">' +
-      pathHeaderHtml(path, actionsHtml, besideNameHtml) +
+      pathHeaderHtml(path, actionsHtml) +
       '<textarea id="editBlock" class="code-edit" spellcheck="false"></textarea>' +
       (isMarkdown ? '<div class="md-preview" id="mdPreview"></div>' : "") +
       "</div>";
@@ -406,10 +398,9 @@
     var editEl = document.getElementById("editBlock");
     var viewBtn = document.getElementById("viewModeBtn");
     var editBtn = document.getElementById("editModeBtn");
-    var previewBtn = document.getElementById("previewModeBtn");
     var previewEl = document.getElementById("mdPreview");
     var copyBtn = document.getElementById("copyBtn");
-    var mode = "view"; // "view" | "edit" | "preview"
+    var mode = "view"; // "view" | "edit"
     var cm = null;
 
     editEl.value = text;
@@ -444,39 +435,34 @@
       mode = next;
       viewBtn.classList.toggle("active", mode === "view");
       editBtn.classList.toggle("active", mode === "edit");
-      if (previewBtn) previewBtn.classList.toggle("active", mode === "preview");
       filePanelEl.classList.toggle("editing", mode === "edit");
 
-      if (mode === "preview") {
-        previewEl.innerHTML = renderMarkdownHtml(getCurrentText());
-        previewEl.style.display = "block";
-        if (cm) cm.getWrapperElement().style.display = "none";
-        else editEl.style.display = "none";
-        return;
+      // Markdown reads as a rendered document in View and as source in Edit.
+      // Every other type keeps the same editor in both modes.
+      var showRendered = isMarkdown && mode === "view";
+
+      if (previewEl) {
+        if (showRendered) previewEl.innerHTML = renderMarkdownHtml(getCurrentText());
+        previewEl.style.display = showRendered ? "block" : "none";
       }
 
-      if (previewEl) previewEl.style.display = "none";
       if (cm) {
-        cm.getWrapperElement().style.display = "block";
-        cm.refresh(); // remeasure after possibly being hidden behind the preview
+        cm.getWrapperElement().style.display = showRendered ? "none" : "block";
+        if (!showRendered) cm.refresh(); // remeasure after being hidden
         // Only flip editability. No focus()/setCursor() call here — either
         // one plants a caret and can scroll the view to it. The cursor
         // should not exist anywhere until the user actually clicks in.
         cm.setOption("readOnly", mode === "edit" ? false : "nocursor");
       } else {
-        editEl.style.display = "block";
+        editEl.style.display = showRendered ? "none" : "block";
         editEl.readOnly = mode !== "edit";
       }
     }
 
+    setMode("view");
+
     viewBtn.addEventListener("click", function () { if (mode !== "view") setMode("view"); });
     editBtn.addEventListener("click", function () { if (mode !== "edit") setMode("edit"); });
-    if (previewBtn) {
-      // Standalone toggle: click to preview, click again to go back to View.
-      previewBtn.addEventListener("click", function () {
-        setMode(mode === "preview" ? "view" : "preview");
-      });
-    }
 
     copyBtn.addEventListener("click", function (ev) {
       var btn = ev.currentTarget;
