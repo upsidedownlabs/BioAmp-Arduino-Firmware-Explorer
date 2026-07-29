@@ -15,7 +15,7 @@
   --accent-glow: rgba(85, 214, 192, 0.28);
 
   --font: Calibri, "Segoe UI", "Trebuchet MS", sans-serif;
-  --subheader-height: 3.5625rem; /* shared by .sidebar-search and .file-panel-header so their bottom borders align */
+  --subheader-height: 3.5625rem; /* shared by .sidebar-views and .file-panel-header so their bottom borders align */
   --sidebar-width: 18.75rem;
   --hairline: 0.0625rem; /* 1px, expressed in rem so it scales with everything else */
 }
@@ -141,12 +141,31 @@ body {
   margin-left: calc(-1 * var(--sidebar-width));
 }
 
-.sidebar-search {
+/* Top row of the sidebar. Carries --subheader-height so its bottom border
+   lines up exactly with the file panel header's across the layout. */
+.sidebar-views {
   height: var(--subheader-height);
   box-sizing: border-box;
   display: flex;
   align-items: center;
   padding: 0 0.75rem;
+  border-bottom: var(--hairline) solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-views .mode-toggle {
+  width: 100%;
+}
+
+.sidebar-views .mode-btn {
+  flex: 1;
+  justify-content: center;
+}
+
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
   border-bottom: var(--hairline) solid var(--border);
   flex-shrink: 0;
 }
@@ -265,6 +284,45 @@ body {
 }
 
 .node.hidden {
+  display: none;
+}
+
+/* ---------- App view: one block per project ---------- */
+
+.app-block {
+  background: var(--void);
+  border: var(--hairline) solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.4rem 0.35rem 0.45rem;
+  margin-bottom: 0.5rem;
+}
+
+/* The project name is the only thing that differs between blocks, so it reads
+   as the heading; "Firmware Sketch" / "Web App" / "Readme" repeat everywhere
+   and sit back as secondary labels beneath it. */
+.app-block-title {
+  padding: 0.15rem 0.4rem 0.4rem;
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-entry {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* :not(.active) so hovering the selected row can't override the dark-on-accent
+   text .node-row.active sets — both selectors carry the same specificity. */
+.app-entry:not(.active):hover {
+  color: var(--ink);
+}
+
+.app-entry.hidden,
+.app-block.hidden {
   display: none;
 }
 
@@ -391,6 +449,17 @@ body {
 
 .mode-btn.active:hover {
   color: var(--on-accent);
+}
+
+/* Locked rather than removed, so the pair keeps its shape and the reason is
+   discoverable on hover. */
+.mode-btn[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mode-btn[disabled]:hover {
+  color: var(--muted);
 }
 
 .copy-btn {

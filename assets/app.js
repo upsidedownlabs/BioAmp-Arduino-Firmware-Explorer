@@ -8,6 +8,12 @@
   var contentEl = document.getElementById("content");
   var sidebarEl = document.getElementById("sidebar");
   var fileFilterEl = document.getElementById("fileFilter");
+  var appViewBtn = document.getElementById("appViewBtn");
+  var folderViewBtn = document.getElementById("folderViewBtn");
+
+  // The two sidebar panes, both built once the tree arrives.
+  var appListEl = null;
+  var folderTreeEl = null;
 
   document.getElementById("sidebarToggle").addEventListener("click", function () {
     sidebarEl.classList.toggle("collapsed");
@@ -33,7 +39,10 @@
     copy: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
     check: '<svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',
     eye: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>',
-    pencil: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>'
+    pencil: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>',
+    chip: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>',
+    browser: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20M6 6.5h.01M9 6.5h.01"/></svg>',
+    book: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'
   };
 
   function formatTitle(str) {
@@ -160,19 +169,222 @@
   }
 
   function renderTree(root) {
-    treeEl.innerHTML = "";
+    folderTreeEl.innerHTML = "";
     var frag = document.createDocumentFragment();
     sortEntries(root.children).forEach(function (child) {
       frag.appendChild(renderNode(child, 0));
     });
-    treeEl.appendChild(frag);
+    folderTreeEl.appendChild(frag);
+  }
+
+  // ---------- App view ----------
+  //
+  // Folder view lists the repository verbatim. App view is a curated read of
+  // the same tree: every folder holding a firmware sketch becomes a project
+  // block, and the web app and README belonging to that project are grouped
+  // underneath it — firmware, then web app, then README.
+
+  var SKETCH_EXTS = ["ino", "pde"];
+
+  function baseName(path) {
+    return path.split("/").pop();
+  }
+
+  function isSketchPath(path) {
+    return SKETCH_EXTS.indexOf(ext(baseName(path))) !== -1;
+  }
+
+  function isReadmePath(path) {
+    return /^readme\.(md|markdown)$/i.test(baseName(path));
+  }
+
+  function isWebAppPath(path) {
+    return /^index\.html?$/i.test(baseName(path));
+  }
+
+  // Walks up from a directory to the closest folder already known to be a
+  // project, so a web app nested in its own subfolder still lands in the
+  // block for the sketch it belongs to.
+  function nearestProjectDir(projects, startDir) {
+    var dir = startDir;
+    for (;;) {
+      if (Object.prototype.hasOwnProperty.call(projects, dir)) return dir;
+      if (dir === "") return null;
+      dir = dirOf(dir);
+    }
+  }
+
+  function buildProjects(paths) {
+    var projects = {};
+    function project(dir) {
+      if (!projects[dir]) projects[dir] = { dir: dir, sketches: [], webApps: [], readme: null };
+      return projects[dir];
+    }
+
+    // Sketches define the projects; sorting first keeps assignment deterministic.
+    paths.filter(isSketchPath).sort().forEach(function (p) {
+      project(dirOf(p)).sketches.push(p);
+    });
+
+    // A web app joins the nearest enclosing project. With none — a repo that is
+    // only a web app, say — its own folder becomes the project.
+    paths.filter(isWebAppPath).sort().forEach(function (p) {
+      var dir = dirOf(p);
+      var owner = nearestProjectDir(projects, dir);
+      project(owner === null ? dir : owner).webApps.push(p);
+    });
+
+    var repoReadme = null;
+    paths.filter(isReadmePath).sort().forEach(function (p) {
+      var dir = dirOf(p);
+      if (dir === "") { repoReadme = p; return; } // the repository's own README
+      var owner = nearestProjectDir(projects, dir);
+      var target = project(owner === null ? dir : owner);
+      if (!target.readme) target.readme = p;
+    });
+
+    return {
+      repoReadme: repoReadme,
+      projects: Object.keys(projects).sort().map(function (dir) { return projects[dir]; })
+    };
+  }
+
+  // What each kind is called in the sidebar and in the file header, replacing
+  // the raw path there.
+  var APP_ENTRY_KINDS = {
+    sketch: { label: "Firmware Sketch", icon: ICONS.chip },
+    webapp: { label: "Web App", icon: ICONS.browser, lockEdit: true },
+    readme: { label: "Readme", icon: ICONS.book }
+  };
+
+  function appEntryRow(kind, path, ownLabel) {
+    var meta = APP_ENTRY_KINDS[kind];
+    var text = ownLabel || meta.label;
+    var row = document.createElement("div");
+    row.className = "node-row app-entry";
+    row.dataset.name = (text + " " + baseName(path)).toLowerCase();
+    row.innerHTML =
+      '<span class="node-icon">' + meta.icon + "</span>" +
+      '<span class="node-label">' + escapeHtml(text) + "</span>";
+    row.addEventListener("click", function () {
+      document.querySelectorAll(".node-row.active").forEach(function (el) {
+        el.classList.remove("active");
+      });
+      row.classList.add("active");
+      openFile(path, { label: meta.label, lockEdit: !!meta.lockEdit });
+      if (window.innerWidth <= 720) sidebarEl.classList.add("collapsed");
+    });
+    return row;
+  }
+
+  function appBlock(title, dataName) {
+    var block = document.createElement("div");
+    block.className = "app-block";
+    block.dataset.name = (dataName || title).toLowerCase();
+    block.innerHTML = '<div class="app-block-title">' + escapeHtml(title) + "</div>";
+    return block;
+  }
+
+  function renderAppList(model) {
+    appListEl.innerHTML = "";
+    var frag = document.createDocumentFragment();
+
+    model.projects.forEach(function (pr) {
+      var block = appBlock(formatTitle(baseName(pr.dir) || pr.dir), pr.dir);
+      // Firmware, then web app, then README.
+      pr.sketches.forEach(function (p) {
+        block.appendChild(appEntryRow("sketch", p, pr.sketches.length > 1 ? baseName(p) : null));
+      });
+      pr.webApps.forEach(function (p) {
+        block.appendChild(appEntryRow("webapp", p, pr.webApps.length > 1 ? baseName(dirOf(p)) : null));
+      });
+      if (pr.readme) block.appendChild(appEntryRow("readme", pr.readme));
+      frag.appendChild(block);
+    });
+
+    // The repository's own README closes the list, after the projects.
+    if (model.repoReadme) {
+      var repoBlock = appBlock("Repository", "repository readme");
+      repoBlock.appendChild(appEntryRow("readme", model.repoReadme));
+      frag.appendChild(repoBlock);
+    }
+
+    if (!frag.childNodes.length) {
+      appListEl.innerHTML =
+        '<div class="tree-loading">No firmware sketches, web apps or READMEs found here. ' +
+        "Switch to Folders to browse the whole repository.</div>";
+      return false;
+    }
+    appListEl.appendChild(frag);
+    return true;
+  }
+
+  // ---------- Sidebar view switching ----------
+
+  var sidebarView = "app"; // "app" | "folders"
+
+  function setSidebarView(next) {
+    sidebarView = next;
+    appViewBtn.classList.toggle("active", next === "app");
+    folderViewBtn.classList.toggle("active", next === "folders");
+    if (appListEl) appListEl.style.display = next === "app" ? "block" : "none";
+    if (folderTreeEl) folderTreeEl.style.display = next === "folders" ? "block" : "none";
+    applyFilter();
+  }
+
+  appViewBtn.addEventListener("click", function () {
+    if (sidebarView !== "app") setSidebarView("app");
+  });
+  folderViewBtn.addEventListener("click", function () {
+    if (sidebarView !== "folders") setSidebarView("folders");
+  });
+
+  function renderSidebar(root, paths) {
+    treeEl.innerHTML = "";
+    appListEl = document.createElement("div");
+    appListEl.className = "app-list";
+    folderTreeEl = document.createElement("div");
+    folderTreeEl.className = "folder-tree";
+    treeEl.appendChild(appListEl);
+    treeEl.appendChild(folderTreeEl);
+
+    renderTree(root);
+    var hasApps = renderAppList(buildProjects(paths));
+    // Nothing to curate (a repo with no sketches, apps or READMEs) — the
+    // folder tree is the only useful view, so start there.
+    setSidebarView(hasApps ? "app" : "folders");
   }
 
   // ---------- Filter ----------
 
-  fileFilterEl.addEventListener("input", function () {
+  fileFilterEl.addEventListener("input", applyFilter);
+
+  function applyFilter() {
     var q = fileFilterEl.value.trim().toLowerCase();
-    var allNodes = treeEl.querySelectorAll(".node");
+    if (sidebarView === "app") filterAppList(q);
+    else filterFolderTree(q);
+  }
+
+  // A block stays if its own name matches (keeping all its entries) or if any
+  // entry inside it does.
+  function filterAppList(q) {
+    if (!appListEl) return;
+    var blocks = appListEl.querySelectorAll(".app-block");
+    Array.prototype.forEach.call(blocks, function (block) {
+      var titleMatch = !q || block.dataset.name.indexOf(q) !== -1;
+      var anyEntry = false;
+      Array.prototype.forEach.call(block.querySelectorAll(".app-entry"), function (row) {
+        var match = titleMatch || row.dataset.name.indexOf(q) !== -1;
+        row.classList.toggle("hidden", !match);
+        if (match) anyEntry = true;
+      });
+      block.classList.toggle("hidden", !anyEntry);
+    });
+  }
+
+  function filterFolderTree(q) {
+    if (!folderTreeEl) return;
+    var allNodes = folderTreeEl.querySelectorAll(".node");
     if (!q) {
       allNodes.forEach(function (n) { n.classList.remove("hidden"); });
       return;
@@ -183,7 +395,7 @@
         n.classList.toggle("hidden", !match);
         if (match) {
           var p = n.parentElement;
-          while (p && p !== treeEl) {
+          while (p && p !== folderTreeEl) {
             if (p.classList && p.classList.contains("node")) {
               p.classList.remove("hidden");
               p.classList.add("expanded");
@@ -201,7 +413,7 @@
         n.classList.toggle("hidden", !anyVisible);
       }
     });
-  });
+  }
 
   // ---------- File content cache + background prefetch ----------
   //
@@ -277,18 +489,23 @@
 
   // ---------- File viewer ----------
 
-  function pathHeaderHtml(path, actionsHtml) {
+  // App view names an entry by what it is ("Firmware Sketch") rather than by
+  // its path; folder view passes the path itself. Either way the full path
+  // stays available on hover.
+  function pathHeaderHtml(label, path, actionsHtml) {
     return (
       '<div class="file-panel-header">' +
       '<div class="file-title-group">' +
-      '<span class="file-path" title="' + escapeHtml(path) + '">' + escapeHtml(path) + "</span>" +
+      '<span class="file-path" title="' + escapeHtml(path) + '">' + escapeHtml(label) + "</span>" +
       "</div>" +
       (actionsHtml ? '<div class="file-panel-actions">' + actionsHtml + "</div>" : "") +
       "</div>"
     );
   }
 
-  function openFile(path) {
+  function openFile(path, opts) {
+    opts = opts || {};
+    var label = opts.label || path;
     var name = path.split("/").pop();
     var e = ext(name);
     var rawUrl = RAW_BASE + path.split("/").map(encodeURIComponent).join("/");
@@ -296,7 +513,7 @@
     if (IMAGE_EXTS.indexOf(e) !== -1) {
       contentEl.innerHTML =
         '<div class="file-panel">' +
-        pathHeaderHtml(path) +
+        pathHeaderHtml(label, path) +
         '<div class="image-preview"><img src="' + rawUrl + '" alt="' + escapeHtml(name) + '"/></div>' +
         "</div>";
       return;
@@ -306,7 +523,7 @@
       var blobUrl = REPO_URL + "/blob/" + BRANCH + "/" + path.split("/").map(encodeURIComponent).join("/");
       contentEl.innerHTML =
         '<div class="file-panel">' +
-        pathHeaderHtml(path) +
+        pathHeaderHtml(label, path) +
         '<div class="binary-notice">This is a binary file and can\'t be previewed here.<br/><a href="' +
         blobUrl + '" target="_blank" rel="noopener">Open on GitHub</a></div>' +
         "</div>";
@@ -315,13 +532,13 @@
 
     var cached = fileCache[path];
     if (cached && cached.text !== undefined) {
-      renderFile(name, path, cached.text);
+      renderFile(name, path, cached.text, opts);
       return;
     }
 
     contentEl.innerHTML =
       '<div class="file-panel">' +
-      pathHeaderHtml(path) +
+      pathHeaderHtml(label, path) +
       '<div class="loading-track"><div class="loading-fill indeterminate" id="loadingFill"></div></div>' +
       '<div class="loading-msg">Loading ' + escapeHtml(name) + '&hellip; <span id="loadingPct"></span></div>' +
       "</div>";
@@ -351,7 +568,7 @@
 
     promise
       .then(function (text) {
-        renderFile(name, path, text);
+        renderFile(name, path, text, opts);
       })
       .catch(function (err) {
         contentEl.innerHTML =
@@ -553,7 +770,12 @@
     });
   }
 
-  function renderFile(name, path, text) {
+  function renderFile(name, path, text, opts) {
+    opts = opts || {};
+    var label = opts.label || path;
+    // App view presents a web app as an app, not as source, so editing is
+    // locked there; the same file is still editable from folder view.
+    var lockEdit = !!opts.lockEdit;
     var lang = LANG_MAP[ext(name)] || "plaintext";
     var isMarkdown = lang === "markdown";
     var isHtml = isHtmlFile(name);
@@ -564,13 +786,15 @@
       '<span class="file-meta">' + lines + " lines &middot; " + sizeKb + " KB</span>" +
       '<div class="mode-toggle" id="modeToggle" role="group" aria-label="View or edit mode">' +
       '<button type="button" class="mode-btn active" id="viewModeBtn">' + ICONS.eye + "<span>View</span></button>" +
-      '<button type="button" class="mode-btn" id="editModeBtn">' + ICONS.pencil + "<span>Edit</span></button>" +
+      '<button type="button" class="mode-btn" id="editModeBtn"' +
+      (lockEdit ? ' disabled title="Editing is locked for web apps here — open it from Folders to edit the source."' : "") +
+      ">" + ICONS.pencil + "<span>Edit</span></button>" +
       "</div>" +
       '<button class="copy-btn" id="copyBtn">' + ICONS.copy + "<span>Copy</span></button>";
 
     contentEl.innerHTML =
       '<div class="file-panel" id="filePanel">' +
-      pathHeaderHtml(path, actionsHtml) +
+      pathHeaderHtml(label, path, actionsHtml) +
       '<textarea id="editBlock" class="code-edit" spellcheck="false"></textarea>' +
       (isMarkdown ? '<div class="md-preview" id="mdPreview"></div>' : "") +
       (isHtml
@@ -686,7 +910,9 @@
     setMode("view");
 
     viewBtn.addEventListener("click", function () { if (mode !== "view") setMode("view"); });
-    editBtn.addEventListener("click", function () { if (mode !== "edit") setMode("edit"); });
+    if (!lockEdit) {
+      editBtn.addEventListener("click", function () { if (mode !== "edit") setMode("edit"); });
+    }
 
     copyBtn.addEventListener("click", function (ev) {
       var btn = ev.currentTarget;
@@ -751,12 +977,13 @@
           console.warn("Repository tree was truncated by the GitHub API; some files may be missing.");
         }
         var tree = data.tree || [];
-        var root = buildTree(tree);
-        renderTree(root);
-
-        var textPaths = tree
+        var filePaths = tree
           .filter(function (item) { return item.type === "blob"; })
-          .map(function (item) { return item.path; })
+          .map(function (item) { return item.path; });
+
+        renderSidebar(buildTree(tree), filePaths);
+
+        var textPaths = filePaths
           .filter(function (path) {
             var e = ext(path.split("/").pop());
             return IMAGE_EXTS.indexOf(e) === -1 && BINARY_EXTS.indexOf(e) === -1;
