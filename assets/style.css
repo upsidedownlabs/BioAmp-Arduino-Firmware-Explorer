@@ -330,17 +330,21 @@ body {
 
 .content {
   flex: 1;
-  overflow-y: auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* .file-panel-body scrolls, not this */
   padding: 0;
   background: var(--void);
 }
 
 .welcome {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
   padding: 2rem;
   color: var(--muted);
   text-align: center;
@@ -352,16 +356,19 @@ body {
 }
 
 .file-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   background: var(--void);
-  min-height: 100%;
 }
 
-/* The header pins to the top of .content (the scroll container) so the
-   filename/actions stay put while only the code scrolls underneath. */
+/* The header is a fixed row rather than part of the scrolled area, so the
+   scrollbar begins beneath it — the same way the sidebar's tree scrolls under
+   its view toggle and filter. It also keeps the header full-bleed to the right
+   edge, since the scrollbar now belongs to the body below it. */
 .file-panel-header {
-  position: sticky;
-  top: 0;
-  z-index: 5;
+  flex-shrink: 0;
   height: var(--subheader-height);
   box-sizing: border-box;
   display: flex;
@@ -378,6 +385,13 @@ body {
 
 .file-panel.editing .file-panel-header {
   border-bottom-color: var(--accent);
+}
+
+/* Everything under the header lives here, and this is what scrolls. */
+.file-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .file-title-group {
@@ -488,11 +502,12 @@ body {
   background: var(--ink);
 }
 
+/* Fallback viewer for files too large for CodeMirror; fills the body the same
+   way the editor does. */
 .code-edit {
   display: block;
   width: 100%;
-  min-height: 6.25rem;
-  max-height: 70vh;
+  height: 100%;
   margin: 0;
   padding: 1rem;
   border: none;
@@ -513,11 +528,20 @@ body {
    blocked/failed stylesheet request can never leave the editor as default
    white-on-black. Background matches --void for a seamless surface. */
 
+/* Fills the panel body and scrolls internally, so only the visible lines are
+   rendered — see the viewportMargin note in app.js. */
 .CodeMirror {
-  height: auto;
+  height: 100%;
   font-family: "Cascadia Code", Consolas, "Courier New", monospace;
   font-size: 0.85rem;
   line-height: 1.5;
+}
+
+/* Fixed room for four digits (9999 lines). CodeMirror otherwise measures the
+   longest line number and sizes the gutter per file, so the code would start
+   at a different x in a 90-line sketch than in a 650-line one. */
+.CodeMirror-linenumbers {
+  min-width: 2.6rem;
 }
 
 .cm-s-onedark.CodeMirror {
@@ -684,13 +708,12 @@ body {
 
 /* ---------- Live web-app preview ---------- */
 
-/* Only while an app is on screen: the panel becomes a column so the frame can
-   take exactly the room left under the sticky header, and the app scrolls
-   inside itself. Code files keep their normal document scrolling. */
-.file-panel.running-app {
+/* A running app fills the body and scrolls inside itself, so the body must not
+   scroll too. Code files keep the body's normal scrolling. */
+.file-panel.running-app .file-panel-body {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  overflow: hidden;
 }
 
 .app-frame {
@@ -753,20 +776,38 @@ body {
   border-left: 0.1875rem solid var(--accent);
 }
 
-/* ---------- scrollbars ---------- */
+/* ---------- scrollbars ----------
+   Every scroll container in the app is listed here; miss one and it falls back
+   to the browser's default scrollbar, which looks nothing like the rest. */
 
-.tree::-webkit-scrollbar, .content::-webkit-scrollbar {
+.tree::-webkit-scrollbar,
+.content::-webkit-scrollbar,
+.file-panel-body::-webkit-scrollbar,
+.CodeMirror-vscrollbar::-webkit-scrollbar,
+.CodeMirror-hscrollbar::-webkit-scrollbar {
   width: 0.625rem;
   height: 0.625rem;
 }
 
-.tree::-webkit-scrollbar-thumb, .content::-webkit-scrollbar-thumb {
+.tree::-webkit-scrollbar-thumb,
+.content::-webkit-scrollbar-thumb,
+.file-panel-body::-webkit-scrollbar-thumb,
+.CodeMirror-vscrollbar::-webkit-scrollbar-thumb,
+.CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
   background: var(--panel);
   border-radius: 0.3125rem;
 }
 
-.tree::-webkit-scrollbar-track, .content::-webkit-scrollbar-track {
+.tree::-webkit-scrollbar-track,
+.content::-webkit-scrollbar-track,
+.file-panel-body::-webkit-scrollbar-track,
+.CodeMirror-vscrollbar::-webkit-scrollbar-track,
+.CodeMirror-hscrollbar::-webkit-scrollbar-track {
   background: transparent;
+  /* Inset the track so the thumb never butts up against the panel edge above
+     or below it. Padding on the container cannot do this — the track always
+     spans the container's full height regardless. */
+  margin: 0.375rem 0;
 }
 
 /* ---------- responsive ---------- */

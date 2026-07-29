@@ -503,6 +503,18 @@
     );
   }
 
+  // Header row + a scrolling body beneath it. Keeping the body a separate
+  // element is what puts the scrollbar below the header instead of alongside
+  // it, matching the sidebar.
+  function filePanelHtml(label, path, actionsHtml, bodyHtml, panelId) {
+    return (
+      '<div class="file-panel"' + (panelId ? ' id="' + panelId + '"' : "") + ">" +
+      pathHeaderHtml(label, path, actionsHtml) +
+      '<div class="file-panel-body">' + bodyHtml + "</div>" +
+      "</div>"
+    );
+  }
+
   function openFile(path, opts) {
     opts = opts || {};
     var label = opts.label || path;
@@ -511,22 +523,16 @@
     var rawUrl = RAW_BASE + path.split("/").map(encodeURIComponent).join("/");
 
     if (IMAGE_EXTS.indexOf(e) !== -1) {
-      contentEl.innerHTML =
-        '<div class="file-panel">' +
-        pathHeaderHtml(label, path) +
-        '<div class="image-preview"><img src="' + rawUrl + '" alt="' + escapeHtml(name) + '"/></div>' +
-        "</div>";
+      contentEl.innerHTML = filePanelHtml(label, path, "",
+        '<div class="image-preview"><img src="' + rawUrl + '" alt="' + escapeHtml(name) + '"/></div>');
       return;
     }
 
     if (BINARY_EXTS.indexOf(e) !== -1) {
       var blobUrl = REPO_URL + "/blob/" + BRANCH + "/" + path.split("/").map(encodeURIComponent).join("/");
-      contentEl.innerHTML =
-        '<div class="file-panel">' +
-        pathHeaderHtml(label, path) +
+      contentEl.innerHTML = filePanelHtml(label, path, "",
         '<div class="binary-notice">This is a binary file and can\'t be previewed here.<br/><a href="' +
-        blobUrl + '" target="_blank" rel="noopener">Open on GitHub</a></div>' +
-        "</div>";
+        blobUrl + '" target="_blank" rel="noopener">Open on GitHub</a></div>');
       return;
     }
 
@@ -536,12 +542,9 @@
       return;
     }
 
-    contentEl.innerHTML =
-      '<div class="file-panel">' +
-      pathHeaderHtml(label, path) +
+    contentEl.innerHTML = filePanelHtml(label, path, "",
       '<div class="loading-track"><div class="loading-fill indeterminate" id="loadingFill"></div></div>' +
-      '<div class="loading-msg">Loading ' + escapeHtml(name) + '&hellip; <span id="loadingPct"></span></div>' +
-      "</div>";
+      '<div class="loading-msg">Loading ' + escapeHtml(name) + '&hellip; <span id="loadingPct"></span></div>');
 
     var fillEl = document.getElementById("loadingFill");
     var pctEl = document.getElementById("loadingPct");
@@ -792,17 +795,15 @@
       "</div>" +
       '<button class="copy-btn" id="copyBtn">' + ICONS.copy + "<span>Copy</span></button>";
 
-    contentEl.innerHTML =
-      '<div class="file-panel" id="filePanel">' +
-      pathHeaderHtml(label, path, actionsHtml) +
+    contentEl.innerHTML = filePanelHtml(label, path, actionsHtml,
       '<textarea id="editBlock" class="code-edit" spellcheck="false"></textarea>' +
       (isMarkdown ? '<div class="md-preview" id="mdPreview"></div>' : "") +
       (isHtml
         ? '<div class="loading-msg" id="appStatus"></div>' +
           '<iframe id="appFrame" class="app-frame" title="' + escapeHtml(name) + ' preview"' +
           ' sandbox="' + APP_SANDBOX + '" allow="' + APP_ALLOW + '" referrerpolicy="no-referrer"></iframe>'
-        : "") +
-      "</div>";
+        : ""),
+      "filePanel");
 
     var filePanelEl = document.getElementById("filePanel");
     var editEl = document.getElementById("editBlock");
@@ -819,9 +820,11 @@
 
     // A single persistent editor backs View and Edit (toggling readOnly), so
     // there is no second element to swap to/from and nothing can shift.
-    // Very large files (big .stl meshes etc.) skip CodeMirror: with
-    // viewportMargin: Infinity it renders every line up front, which can
-    // hang the tab — the plain readonly textarea shows them instantly.
+    //
+    // The editor fills the panel body and scrolls itself, which lets it render
+    // only the lines around the viewport. Sizing it to its content instead
+    // would force every line to be laid out during the click — on a 650-line
+    // sketch that alone cost ~400ms of blocked UI.
     var LARGE_FILE_CHARS = 1500000;
     if (window.CodeMirror && text.length < LARGE_FILE_CHARS) {
       cm = window.CodeMirror.fromTextArea(editEl, {
@@ -832,9 +835,11 @@
         indentUnit: 2,
         tabSize: 2,
         readOnly: "nocursor",
-        viewportMargin: Infinity
+        // A little beyond the viewport, so ordinary scrolling stays ahead of
+        // the renderer without paying for the whole document.
+        viewportMargin: 30
       });
-      cm.setSize("100%", "auto");
+      cm.setSize("100%", "100%");
     } else {
       editEl.readOnly = true; // fallback viewer starts in View mode
     }
