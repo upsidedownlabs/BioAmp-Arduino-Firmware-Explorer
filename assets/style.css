@@ -1,18 +1,18 @@
 :root {
-  /* One Dark (Atom) — the classic professional dark-UI palette.
-     Charcoal-slate surfaces, soft bright text (medium-high contrast),
-     and a vivid-but-tasteful syntax color set defined further below
-     (self-hosted, so no CDN failure can ever leave the code unstyled). */
-  --void: #23272e;   /* darkest: topbar, code surface */
-  --deep: #2c313a;   /* page canvas, sidebar, sticky file header */
-  --panel: #3a4049;  /* elevated surfaces: hover rows, inline code, toggle track */
-  --muted: #8b93a1;  /* secondary/muted text, subtle icons */
-  --ink: #dcdfe4;    /* primary text — soft bright, not stark white */
-  --accent: #61afef; /* the one accent: One Dark blue — buttons, active state, links, focus */
+  /* Cool slate dark UI: blue-grey surfaces with a single aqua signal color.
+     Four clear surface steps, medium contrast text. Syntax colors further
+     below stay One Dark (self-hosted, so no CDN failure unstyles the code). */
+  --void: #14171d;   /* darkest: topbar, code surface */
+  --deep: #1c2027;   /* page canvas, sidebar, sticky file header */
+  --panel: #29303a;  /* elevated surfaces: hover rows, inline code, toggle track */
+  --muted: #8b95a6;  /* secondary/muted text, subtle icons */
+  --ink: #e3e8f0;    /* primary text — cool off-white, not stark */
+  --accent: #55d6c0; /* the one accent: aqua — buttons, active state, links, focus */
+  --on-accent: #0c1a18;
 
-  --border: rgba(62, 68, 81, 0.9);
-  --accent-wash: rgba(97, 175, 239, 0.12);
-  --accent-glow: rgba(97, 175, 239, 0.3);
+  --border: rgba(126, 140, 160, 0.22);
+  --accent-wash: rgba(85, 214, 192, 0.12);
+  --accent-glow: rgba(85, 214, 192, 0.28);
 
   --font: Calibri, "Segoe UI", "Trebuchet MS", sans-serif;
   --subheader-height: 3.5625rem; /* shared by .sidebar-search and .file-panel-header so their bottom borders align */
@@ -217,7 +217,7 @@ body {
 
 .node-row.active {
   background: var(--accent);
-  color: var(--void);
+  color: var(--on-accent);
   font-weight: bold;
 }
 
@@ -234,7 +234,7 @@ body {
 }
 
 .node-row.active .chevron {
-  color: var(--void);
+  color: var(--on-accent);
   opacity: 1;
 }
 
@@ -245,7 +245,7 @@ body {
 }
 
 .node-row.active .node-icon {
-  color: var(--void);
+  color: var(--on-accent);
 }
 
 .node-row .node-label {
@@ -355,7 +355,7 @@ body {
   align-items: center;
   background: var(--panel);
   border: var(--hairline) solid var(--border);
-  border-radius: 0.5rem; /* same rounded-square language as every other button */
+  border-radius: 0.5rem;
   padding: 0.1875rem;
   gap: 0.125rem;
   flex-shrink: 0;
@@ -383,14 +383,14 @@ body {
 
 .mode-btn.active {
   background: var(--accent);
-  color: var(--void);
+  color: var(--on-accent);
   font-weight: bold;
   cursor: default;
   box-shadow: 0 0 0.75rem var(--accent-glow);
 }
 
 .mode-btn.active:hover {
-  color: var(--void);
+  color: var(--on-accent);
 }
 
 .copy-btn {
@@ -398,7 +398,7 @@ body {
   align-items: center;
   gap: 0.35rem;
   background: var(--accent);
-  color: var(--void);
+  color: var(--on-accent);
   border: none;
   border-radius: 0.375rem;
   padding: 0.4rem 0.75rem;
@@ -472,41 +472,41 @@ body {
 
 .cm-s-onedark .CodeMirror-selected,
 .cm-s-onedark.CodeMirror-focused .CodeMirror-selected {
-  background: rgba(97, 175, 239, 0.2);
+  background: rgba(85, 214, 192, 0.20);
 }
 
 .cm-s-onedark .CodeMirror-matchingbracket {
   color: var(--ink) !important;
-  background: rgba(97, 175, 239, 0.3);
+  background: rgba(85, 214, 192, 0.30);
   outline: none;
 }
 
 /* One Dark syntax colors */
-.cm-s-onedark span.cm-comment { color: #5c6370; font-style: italic; }
-.cm-s-onedark span.cm-keyword { color: #c678dd; }
-.cm-s-onedark span.cm-meta { color: #c678dd; }        /* #define, #include */
-.cm-s-onedark span.cm-string { color: #98c379; }
-.cm-s-onedark span.cm-string-2 { color: #56b6c2; }
-.cm-s-onedark span.cm-number { color: #d19a66; }
-.cm-s-onedark span.cm-atom { color: #d19a66; }
-.cm-s-onedark span.cm-def { color: #61afef; }
-.cm-s-onedark span.cm-builtin { color: #56b6c2; }
-.cm-s-onedark span.cm-type { color: #e5c07b; }
+.cm-s-onedark span.cm-comment { color: #6d7684; font-style: italic; }
+.cm-s-onedark span.cm-keyword { color: #d08ce6; }
+.cm-s-onedark span.cm-meta { color: #d08ce6; }        /* #define, #include */
+.cm-s-onedark span.cm-string { color: #a3d17f; }
+.cm-s-onedark span.cm-string-2 { color: #5fc7d4; }
+.cm-s-onedark span.cm-number { color: #dca46d; }
+.cm-s-onedark span.cm-atom { color: #dca46d; }
+.cm-s-onedark span.cm-def { color: #6cb6ff; }
+.cm-s-onedark span.cm-builtin { color: #5fc7d4; }
+.cm-s-onedark span.cm-type { color: #ecc981; }
 .cm-s-onedark span.cm-variable { color: var(--ink); }
-.cm-s-onedark span.cm-variable-2 { color: #e06c75; }
-.cm-s-onedark span.cm-variable-3 { color: #e5c07b; }
-.cm-s-onedark span.cm-property { color: #61afef; }
-.cm-s-onedark span.cm-operator { color: #56b6c2; }
-.cm-s-onedark span.cm-qualifier { color: #e5c07b; }
+.cm-s-onedark span.cm-variable-2 { color: #ea767f; }
+.cm-s-onedark span.cm-variable-3 { color: #ecc981; }
+.cm-s-onedark span.cm-property { color: #6cb6ff; }
+.cm-s-onedark span.cm-operator { color: #5fc7d4; }
+.cm-s-onedark span.cm-qualifier { color: #ecc981; }
 .cm-s-onedark span.cm-bracket { color: var(--ink); }
-.cm-s-onedark span.cm-tag { color: #e06c75; }
-.cm-s-onedark span.cm-attribute { color: #d19a66; }
-.cm-s-onedark span.cm-header { color: #e06c75; font-weight: bold; }
-.cm-s-onedark span.cm-quote { color: #98c379; font-style: italic; }
-.cm-s-onedark span.cm-link { color: #61afef; text-decoration: underline; }
-.cm-s-onedark span.cm-url { color: #56b6c2; }
+.cm-s-onedark span.cm-tag { color: #ea767f; }
+.cm-s-onedark span.cm-attribute { color: #dca46d; }
+.cm-s-onedark span.cm-header { color: #ea767f; font-weight: bold; }
+.cm-s-onedark span.cm-quote { color: #a3d17f; font-style: italic; }
+.cm-s-onedark span.cm-link { color: #6cb6ff; text-decoration: underline; }
+.cm-s-onedark span.cm-url { color: #5fc7d4; }
 .cm-s-onedark span.cm-hr { color: var(--muted); }
-.cm-s-onedark span.cm-error { color: #e06c75; }
+.cm-s-onedark span.cm-error { color: #ea767f; }
 
 /* ---------- Markdown preview ---------- */
 
