@@ -255,7 +255,7 @@
   var APP_ENTRY_KINDS = {
     sketch: { label: "Arduino Sketch", icon: ICONS.chip, useFileName: true },
     webapp: { label: "Web App", icon: ICONS.browser, lockEdit: true },
-    readme: { label: "Readme", icon: ICONS.book }
+    readme: { label: "Readme", icon: ICONS.book, lockEdit: true }
   };
 
   function appEntryRow(kind, path, ownLabel) {
@@ -304,11 +304,11 @@
       frag.appendChild(block);
     });
 
-    // The repository's own README closes the list, after the projects.
+    // The repository's own README opens the list, before the projects.
     if (model.repoReadme) {
       var repoBlock = appBlock("Repository", "repository readme");
       repoBlock.appendChild(appEntryRow("readme", model.repoReadme));
-      frag.appendChild(repoBlock);
+      frag.insertBefore(repoBlock, frag.firstChild);
     }
 
     if (!frag.childNodes.length) {
@@ -793,7 +793,7 @@
       '<div class="mode-toggle" id="modeToggle" role="group" aria-label="View or edit mode">' +
       '<button type="button" class="mode-btn active" id="viewModeBtn">' + ICONS.eye + "<span>View</span></button>" +
       '<button type="button" class="mode-btn" id="editModeBtn"' +
-      (lockEdit ? ' disabled title="Editing is locked for web apps here — open it from Folders to edit the source."' : "") +
+      (lockEdit ? ' disabled title="Editing is locked in Apps view — open it from Folders to edit the source."' : "") +
       ">" + ICONS.pencil + "<span>Edit</span></button>" +
       "</div>" +
       '<button class="copy-btn" id="copyBtn">' + ICONS.copy + "<span>Copy</span></button>";
