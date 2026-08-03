@@ -298,7 +298,7 @@ body {
 }
 
 /* The project name is the only thing that differs between blocks, so it reads
-   as the heading; "Firmware Sketch" / "Web App" / "Readme" repeat everywhere
+   as the heading; "Arduino Sketch" / "Web App" / "Readme" repeat everywhere
    and sit back as secondary labels beneath it. */
 .app-block-title {
   padding: 0.15rem 0.4rem 0.4rem;

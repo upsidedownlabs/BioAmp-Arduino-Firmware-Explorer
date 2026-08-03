@@ -180,9 +180,9 @@
   // ---------- App view ----------
   //
   // Folder view lists the repository verbatim. App view is a curated read of
-  // the same tree: every folder holding a firmware sketch becomes a project
+  // the same tree: every folder holding an Arduino sketch becomes a project
   // block, and the web app and README belonging to that project are grouped
-  // underneath it — firmware, then web app, then README.
+  // underneath it — sketch, then web app, then README.
 
   var SKETCH_EXTS = ["ino", "pde"];
 
@@ -249,10 +249,11 @@
     };
   }
 
-  // What each kind is called in the sidebar and in the file header, replacing
-  // the raw path there.
+  // What each kind is called in the sidebar. `useFileName` means the file
+  // header names the actual file instead of repeating the generic label —
+  // which sketch does, since the .ino name is what identifies the code.
   var APP_ENTRY_KINDS = {
-    sketch: { label: "Firmware Sketch", icon: ICONS.chip },
+    sketch: { label: "Arduino Sketch", icon: ICONS.chip, useFileName: true },
     webapp: { label: "Web App", icon: ICONS.browser, lockEdit: true },
     readme: { label: "Readme", icon: ICONS.book }
   };
@@ -260,6 +261,7 @@
   function appEntryRow(kind, path, ownLabel) {
     var meta = APP_ENTRY_KINDS[kind];
     var text = ownLabel || meta.label;
+    var headerLabel = meta.useFileName ? baseName(path) : meta.label;
     var row = document.createElement("div");
     row.className = "node-row app-entry";
     row.dataset.name = (text + " " + baseName(path)).toLowerCase();
@@ -271,7 +273,7 @@
         el.classList.remove("active");
       });
       row.classList.add("active");
-      openFile(path, { label: meta.label, lockEdit: !!meta.lockEdit });
+      openFile(path, { label: headerLabel, lockEdit: !!meta.lockEdit });
       if (window.innerWidth <= 720) sidebarEl.classList.add("collapsed");
     });
     return row;
@@ -311,7 +313,7 @@
 
     if (!frag.childNodes.length) {
       appListEl.innerHTML =
-        '<div class="tree-loading">No firmware sketches, web apps or READMEs found here. ' +
+        '<div class="tree-loading">No Arduino sketches, web apps or READMEs found here. ' +
         "Switch to Folders to browse the whole repository.</div>";
       return false;
     }
@@ -489,9 +491,10 @@
 
   // ---------- File viewer ----------
 
-  // App view names an entry by what it is ("Firmware Sketch") rather than by
-  // its path; folder view passes the path itself. Either way the full path
-  // stays available on hover.
+  // App view names most entries by what they are ("Web App", "Readme") rather
+  // than by path; a sketch is named by its actual filename instead, since
+  // that's what identifies the code. Folder view always passes the path
+  // itself. Either way the full path stays available on hover.
   function pathHeaderHtml(label, path, actionsHtml) {
     return (
       '<div class="file-panel-header">' +
