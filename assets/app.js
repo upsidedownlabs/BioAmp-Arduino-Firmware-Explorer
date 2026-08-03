@@ -42,7 +42,8 @@
     pencil: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>',
     chip: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>',
     browser: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20M6 6.5h.01M9 6.5h.01"/></svg>',
-    book: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>'
+    book: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
+    github: '<svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>'
   };
 
   function formatTitle(str) {
@@ -279,11 +280,13 @@
     return row;
   }
 
+  // A falsy title omits the heading entirely — used for the repo README,
+  // which has no project name to head it with and just reads "Readme".
   function appBlock(title, dataName) {
     var block = document.createElement("div");
     block.className = "app-block";
-    block.dataset.name = (dataName || title).toLowerCase();
-    block.innerHTML = '<div class="app-block-title">' + escapeHtml(title) + "</div>";
+    block.dataset.name = (dataName || title || "").toLowerCase();
+    if (title) block.innerHTML = '<div class="app-block-title">' + escapeHtml(title) + "</div>";
     return block;
   }
 
@@ -304,9 +307,10 @@
       frag.appendChild(block);
     });
 
-    // The repository's own README opens the list, before the projects.
+    // The repository's own README opens the list, before the projects — just
+    // "Readme", with no "Repository" heading above it.
     if (model.repoReadme) {
-      var repoBlock = appBlock("Repository", "repository readme");
+      var repoBlock = appBlock(null, "repository readme");
       repoBlock.appendChild(appEntryRow("readme", model.repoReadme));
       frag.insertBefore(repoBlock, frag.firstChild);
     }
@@ -491,6 +495,10 @@
 
   // ---------- File viewer ----------
 
+  function repoBlobUrl(path) {
+    return REPO_URL + "/blob/" + BRANCH + "/" + path.split("/").map(encodeURIComponent).join("/");
+  }
+
   // App view names most entries by what they are ("Web App", "Readme") rather
   // than by path; a sketch is named by its actual filename instead, since
   // that's what identifies the code. Folder view always passes the path
@@ -500,6 +508,8 @@
       '<div class="file-panel-header">' +
       '<div class="file-title-group">' +
       '<span class="file-path" title="' + escapeHtml(path) + '">' + escapeHtml(label) + "</span>" +
+      '<a class="header-github-link" href="' + escapeHtml(repoBlobUrl(path)) + '" target="_blank" rel="noopener" ' +
+      'title="Open ' + escapeHtml(path) + ' on GitHub" aria-label="Open on GitHub">' + ICONS.github + "</a>" +
       "</div>" +
       (actionsHtml ? '<div class="file-panel-actions">' + actionsHtml + "</div>" : "") +
       "</div>"
@@ -532,7 +542,7 @@
     }
 
     if (BINARY_EXTS.indexOf(e) !== -1) {
-      var blobUrl = REPO_URL + "/blob/" + BRANCH + "/" + path.split("/").map(encodeURIComponent).join("/");
+      var blobUrl = repoBlobUrl(path);
       contentEl.innerHTML = filePanelHtml(label, path, "",
         '<div class="binary-notice">This is a binary file and can\'t be previewed here.<br/><a href="' +
         blobUrl + '" target="_blank" rel="noopener">Open on GitHub</a></div>');

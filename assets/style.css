@@ -410,6 +410,19 @@ body {
   font-weight: bold;
 }
 
+.header-github-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: color 0.15s ease;
+}
+
+.header-github-link:hover {
+  color: var(--accent);
+}
+
 .file-panel-actions {
   display: flex;
   align-items: center;
