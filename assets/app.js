@@ -43,7 +43,9 @@
     chip: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>',
     browser: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20M6 6.5h.01M9 6.5h.01"/></svg>',
     book: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
-    github: '<svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>'
+    github: '<svg viewBox="0 0 16 16" width="15" height="15"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>',
+    expand: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>',
+    collapse: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3M16 3v3a2 2 0 0 0 2 2h3M8 21v-3a2 2 0 0 0-2-2H3M16 21v-3a2 2 0 0 1 2-2h3"/></svg>'
   };
 
   function formatTitle(str) {
@@ -806,6 +808,10 @@
       (lockEdit ? ' disabled title="Editing is locked in Apps view — open it from Folders to edit the source."' : "") +
       ">" + ICONS.pencil + "<span>Edit</span></button>" +
       "</div>" +
+      (isHtml
+        ? '<button type="button" class="fullscreen-btn" id="fullscreenBtn">' +
+          ICONS.expand + "<span>Fullscreen</span></button>"
+        : "") +
       '<button class="copy-btn" id="copyBtn">' + ICONS.copy + "<span>Copy</span></button>";
 
     contentEl.innerHTML = filePanelHtml(label, path, actionsHtml,
@@ -813,8 +819,17 @@
       (isMarkdown ? '<div class="md-preview" id="mdPreview"></div>' : "") +
       (isHtml
         ? '<div class="loading-msg" id="appStatus"></div>' +
+          // Fullscreen targets this wrapper rather than the iframe itself.
+          // The iframe alone, once promoted to the browser's top layer, would
+          // cover the header button that opened it — there'd be no way back
+          // except Esc. The exit button lives inside the wrapper instead, so
+          // it enters the top layer too and stays reachable.
+          '<div class="app-frame-wrap" id="appFrameWrap">' +
           '<iframe id="appFrame" class="app-frame" title="' + escapeHtml(name) + ' preview"' +
-          ' sandbox="' + APP_SANDBOX + '" allow="' + APP_ALLOW + '" referrerpolicy="no-referrer"></iframe>'
+          ' sandbox="' + APP_SANDBOX + '" allow="' + APP_ALLOW + '" referrerpolicy="no-referrer"></iframe>' +
+          '<button type="button" class="app-exit-fullscreen" id="exitFullscreenBtn" title="Exit fullscreen">' +
+          ICONS.collapse + "</button>" +
+          "</div>"
         : ""),
       "filePanel");
 
@@ -824,7 +839,10 @@
     var editBtn = document.getElementById("editModeBtn");
     var previewEl = document.getElementById("mdPreview");
     var appFrameEl = document.getElementById("appFrame");
+    var appFrameWrapEl = document.getElementById("appFrameWrap");
     var appStatusEl = document.getElementById("appStatus");
+    var fullscreenBtn = document.getElementById("fullscreenBtn");
+    var exitFullscreenBtn = document.getElementById("exitFullscreenBtn");
     var copyBtn = document.getElementById("copyBtn");
     var mode = "view"; // "view" | "edit"
     var cm = null;
@@ -906,10 +924,17 @@
         previewEl.style.display = showRendered ? "block" : "none";
       }
 
-      if (appFrameEl) {
-        appFrameEl.style.display = showApp ? "block" : "none";
+      if (appFrameWrapEl) {
+        appFrameWrapEl.style.display = showApp ? "flex" : "none";
         if (showApp) startApp();
         else appStatusEl.style.display = "none";
+      }
+
+      // Fullscreen only makes sense while the app is actually running, not
+      // while its source is on screen.
+      if (fullscreenBtn) {
+        fullscreenBtn.style.display = showApp ? "flex" : "none";
+        if (!showApp && document.fullscreenElement === appFrameWrapEl) document.exitFullscreen();
       }
 
       if (cm) {
@@ -930,6 +955,36 @@
     viewBtn.addEventListener("click", function () { if (mode !== "view") setMode("view"); });
     if (!lockEdit) {
       editBtn.addEventListener("click", function () { if (mode !== "edit") setMode("edit"); });
+    }
+
+    if (fullscreenBtn) {
+      var enterFullscreen = function () {
+        appFrameWrapEl.requestFullscreen().catch(function () { /* denied or unsupported; button just stays put */ });
+      };
+      fullscreenBtn.addEventListener("click", function () {
+        if (document.fullscreenElement === appFrameWrapEl) document.exitFullscreen();
+        else enterFullscreen();
+      });
+      // The header button becomes unreachable once fullscreen starts — it's
+      // outside the wrapper, so the browser's top-layer promotion covers it.
+      // This is the button that stays reachable, drawn as an overlay inside
+      // the wrapper so it's promoted along with the app.
+      exitFullscreenBtn.addEventListener("click", function () { document.exitFullscreen(); });
+
+      // Fires for both directions — either button's click, and Escape/browser
+      // chrome — so the header label is kept in sync from here rather than
+      // its own click handler. Self-unsubscribes once this panel is torn
+      // down, since a fresh renderFile() never reuses this listener.
+      document.addEventListener("fullscreenchange", function onFullscreenChange() {
+        if (!fullscreenBtn.isConnected) {
+          document.removeEventListener("fullscreenchange", onFullscreenChange);
+          return;
+        }
+        var isFs = document.fullscreenElement === appFrameWrapEl;
+        fullscreenBtn.classList.toggle("active", isFs);
+        fullscreenBtn.innerHTML = (isFs ? ICONS.collapse : ICONS.expand) +
+          "<span>" + (isFs ? "Exit Fullscreen" : "Fullscreen") + "</span>";
+      });
     }
 
     copyBtn.addEventListener("click", function (ev) {
