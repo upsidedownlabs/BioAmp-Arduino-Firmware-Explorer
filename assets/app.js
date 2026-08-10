@@ -722,6 +722,60 @@
     });
   }
 
+  // Opening a device chooser (navigator.serial.requestPort() and the USB/HID
+  // equivalents) while this frame is *itself* the fullscreen element is what
+  // never shows the picker at all — Chromium apparently can't cleanly
+  // interleave "exit fullscreen" and "show a native chooser" as simultaneous
+  // side-effects of the same call when the fullscreen element is an iframe;
+  // the call just stalls. So rather than let the browser attempt that, this
+  // wrapper asks the parent explorer to fully exit fullscreen FIRST and wait
+  // for that to finish, and only then invokes the real API — by which point
+  // the frame is definitely not fullscreen, and there's nothing left to
+  // interleave. The round trip is a couple of postMessages, not a network
+  // call, so it doesn't run long enough to expire the click's user
+  // activation (which requestPort() itself still requires).
+  //
+  // Deliberately does NOT try to return to fullscreen afterward — an earlier
+  // version did, and it made things worse: the auto-return felt like an
+  // unwanted glitch, and worse, it fired even when the app hadn't been
+  // fullscreen to begin with. Once the chooser is done, this just leaves the
+  // page exactly where a normal, non-fullscreen page would.
+  //
+  // A safety-net timeout calls through on its own if nothing answers — e.g.
+  // this file opened standalone, outside the explorer. Reaches the frame via
+  // toString(), so it has to stay self-contained ES5.
+  function installChooserNotifier() {
+    function wrap(obj, method, api) {
+      if (!obj || typeof obj[method] !== "function") return;
+      var original = obj[method];
+      obj[method] = function () {
+        var args = arguments, self = this, called = false;
+        function callOriginal() {
+          if (called) return null;
+          called = true;
+          return original.apply(self, args);
+        }
+        return new Promise(function (resolve, reject) {
+          function proceed() {
+            window.removeEventListener("message", onReady);
+            var result = callOriginal();
+            if (result) result.then(resolve, reject);
+          }
+          function onReady(ev) {
+            if (!ev.data || ev.data.bioampExplorerChooserReady !== api) return;
+            proceed();
+          }
+          window.addEventListener("message", onReady);
+          try { window.parent.postMessage({ bioampExplorerChooser: api }, "*"); } catch (ignored) {}
+          setTimeout(proceed, 400);
+        });
+      };
+    }
+    wrap(window.navigator.serial, "requestPort", "serial");
+    wrap(window.navigator.usb, "requestDevice", "usb");
+    wrap(window.navigator.hid, "requestDevice", "hid");
+  }
+
   // An inlined stylesheet's url() references were written relative to the CSS
   // file, not to the page, so they have to be resolved before the <base> gets
   // a chance to resolve them against the wrong directory.
@@ -765,7 +819,7 @@
     doc.head.insertBefore(base, doc.head.firstChild);
 
     var shim = doc.createElement("script");
-    shim.textContent = "(" + installStorageShim + ")();";
+    shim.textContent = "(" + installStorageShim + ")();(" + installChooserNotifier + ")();";
     doc.head.insertBefore(shim, base.nextSibling);
 
     var jobs = inlineAssets(doc, dir, 'link[rel~="stylesheet"][href]', "href", function (d, tag, css, p) {
@@ -971,6 +1025,68 @@
       // the wrapper so it's promoted along with the app.
       exitFullscreenBtn.addEventListener("click", function () { document.exitFullscreen(); });
 
+      // Opening a device chooser (Web Serial/USB/HID) forces the browser out
+      // of fullscreen — that's the browser protecting the permission dialog
+      // from being drawn over by page content, and no page can prevent it.
+      // (Not even pressing F11 instead of a page button avoids this: F11 is
+      // OS/browser-chrome fullscreen, entirely separate from the Fullscreen
+      // API a page's own button has to use — it never touches
+      // document.fullscreenElement, so the browser never needs to fire an
+      // exit for it. Any *page-triggered* fullscreen goes through the same
+      // API this does, so this exit is unavoidable here regardless of how
+      // the button is built.)
+      //
+      // Deliberately does NOT try to return to fullscreen once the chooser is
+      // done — a stayed there, silently, exactly like leaving fullscreen on
+      // any other site. Set only when we ourselves triggered the exit for a
+      // chooser (below), so a plain Escape press never shows it, and it's
+      // reset on every use so it can only ever fire for the exit that caused
+      // it — not some unrelated one that happens to follow it.
+      var chooserRequestedWhileFullscreen = false;
+
+      function showReentryToast() {
+        var old = document.getElementById("fsReentryToast");
+        if (old) old.remove();
+        var toast = document.createElement("div");
+        toast.id = "fsReentryToast";
+        toast.className = "fs-reentry-toast";
+        toast.innerHTML =
+          "<span>Exited fullscreen to show the device picker.</span>" +
+          '<button type="button">' + ICONS.expand + "<span>Back to Fullscreen</span></button>";
+        toast.querySelector("button").addEventListener("click", function () {
+          toast.remove();
+          enterFullscreen(); // a fresh click, so it carries real user activation
+        });
+        filePanelEl.appendChild(toast);
+        setTimeout(function () { if (toast.isConnected) toast.remove(); }, 8000);
+      }
+
+      window.addEventListener("message", function onAppMessage(ev) {
+        if (!appFrameEl.isConnected) {
+          window.removeEventListener("message", onAppMessage);
+          return;
+        }
+        if (ev.source !== appFrameEl.contentWindow || !ev.data) return;
+
+        var api = ev.data.bioampExplorerChooser;
+        if (!api) return;
+
+        function ack() {
+          try { appFrameEl.contentWindow.postMessage({ bioampExplorerChooserReady: api }, "*"); } catch (ignored) {}
+        }
+        // Exit first and wait for it to actually finish before telling the
+        // app it can call the real API — that ordering is the fix (see
+        // installChooserNotifier above). Nothing to do if it's already not
+        // fullscreen, which is the common case — no exit, no toast, no
+        // change in behavior at all versus a plain, non-fullscreen page.
+        if (document.fullscreenElement === appFrameWrapEl) {
+          chooserRequestedWhileFullscreen = true;
+          document.exitFullscreen().then(ack, ack);
+        } else {
+          ack();
+        }
+      });
+
       // Fires for both directions — either button's click, and Escape/browser
       // chrome — so the header label is kept in sync from here rather than
       // its own click handler. Self-unsubscribes once this panel is torn
@@ -984,6 +1100,10 @@
         fullscreenBtn.classList.toggle("active", isFs);
         fullscreenBtn.innerHTML = (isFs ? ICONS.collapse : ICONS.expand) +
           "<span>" + (isFs ? "Exit Fullscreen" : "Fullscreen") + "</span>";
+        if (!isFs && chooserRequestedWhileFullscreen) {
+          chooserRequestedWhileFullscreen = false;
+          showReentryToast();
+        }
       });
     }
 
