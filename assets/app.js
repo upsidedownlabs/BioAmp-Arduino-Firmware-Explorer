@@ -539,7 +539,7 @@
 
     if (IMAGE_EXTS.indexOf(e) !== -1) {
       contentEl.innerHTML = filePanelHtml(label, path, "",
-        '<div class="image-preview"><img src="' + rawUrl + '" alt="' + escapeHtml(name) + '"/></div>');
+        '<div class="image-preview"><img src="' + escapeHtml(rawUrl) + '" alt="' + escapeHtml(name) + '"/></div>');
       return;
     }
 
@@ -547,7 +547,7 @@
       var blobUrl = repoBlobUrl(path);
       contentEl.innerHTML = filePanelHtml(label, path, "",
         '<div class="binary-notice">This is a binary file and can\'t be previewed here.<br/><a href="' +
-        blobUrl + '" target="_blank" rel="noopener">Open on GitHub</a></div>');
+        escapeHtml(blobUrl) + '" target="_blank" rel="noopener">Open on GitHub</a></div>');
       return;
     }
 
