@@ -218,9 +218,11 @@
   }
 
   function buildProjects(paths) {
-    var projects = {};
+    var projects = Object.create(null);
     function project(dir) {
-      if (!projects[dir]) projects[dir] = { dir: dir, sketches: [], webApps: [], readme: null };
+      if (!Object.prototype.hasOwnProperty.call(projects, dir)) {
+        projects[dir] = { dir: dir, sketches: [], webApps: [], readme: null };
+      }
       return projects[dir];
     }
 
@@ -335,6 +337,8 @@
     sidebarView = next;
     appViewBtn.classList.toggle("active", next === "app");
     folderViewBtn.classList.toggle("active", next === "folders");
+    appViewBtn.setAttribute("aria-pressed", String(next === "app"));
+    folderViewBtn.setAttribute("aria-pressed", String(next === "folders"));
     if (appListEl) appListEl.style.display = next === "app" ? "block" : "none";
     if (folderTreeEl) folderTreeEl.style.display = next === "folders" ? "block" : "none";
     applyFilter();

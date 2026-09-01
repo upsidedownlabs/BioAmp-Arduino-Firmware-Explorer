@@ -614,7 +614,7 @@ body {
 }
 
 /* One Dark syntax colors */
-.cm-s-onedark span.cm-comment { color: #6d7684; font-style: italic; }
+.cm-s-onedark span.cm-comment { color: #7f8899; font-style: italic; }
 .cm-s-onedark span.cm-keyword { color: #d08ce6; }
 .cm-s-onedark span.cm-meta { color: #d08ce6; }        /* #define, #include */
 .cm-s-onedark span.cm-string { color: #a3d17f; }
