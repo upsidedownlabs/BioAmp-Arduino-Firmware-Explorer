@@ -1127,13 +1127,22 @@
   }
 
   function friendlyFetchError(err) {
-    return err.message === "RATE_LIMIT"
-      ? "GitHub's public API rate limit was reached for your connection. Please wait a while and refresh, or browse the repository directly on GitHub."
-      : "Could not reach GitHub (" + err.message + ").";
+    if (err.message === "RATE_LIMIT") {
+      return "GitHub's public API rate limit was reached for your connection. Please wait a while and refresh, or browse the repository directly on GitHub.";
+    }
+    if (err.message === "FORBIDDEN") {
+      return "GitHub denied access to this repository (it may be private, or restricted by an organization's SSO policy). Browse it directly on GitHub instead.";
+    }
+    return "Could not reach GitHub (" + err.message + ").";
   }
 
   function checkedJson(res) {
-    if (res.status === 403) throw new Error("RATE_LIMIT");
+    if (res.status === 403) {
+      // A 403 alone doesn't mean the rate limit was hit — GitHub also
+      // returns it for abuse-detection triggers and SSO-protected orgs.
+      // X-RateLimit-Remaining: 0 is what actually confirms exhaustion.
+      throw new Error(res.headers.get("X-RateLimit-Remaining") === "0" ? "RATE_LIMIT" : "FORBIDDEN");
+    }
     if (!res.ok) throw new Error("HTTP " + res.status);
     return res.json();
   }
