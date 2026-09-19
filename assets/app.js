@@ -10,6 +10,9 @@
   var fileFilterEl = document.getElementById("fileFilter");
   var appViewBtn = document.getElementById("appViewBtn");
   var folderViewBtn = document.getElementById("folderViewBtn");
+  var repoFormEl = document.getElementById("repoForm");
+  var repoUrlEl = document.getElementById("repoUrl");
+  var repoUrlErrorEl = document.getElementById("repoUrlError");
 
   // The two sidebar panes, both built once the tree arrives.
   var appListEl = null;
@@ -30,6 +33,68 @@
     var qs = new URLSearchParams(location.search);
     return { owner: qs.get("owner"), repo: qs.get("repo"), branch: qs.get("branch") };
   }
+
+  function parseGitHubRepoUrl(value) {
+    var url;
+    var candidate = value.trim();
+    if (/^(?:www\.)?github\.com\//i.test(candidate)) candidate = "https://" + candidate;
+    try {
+      url = new URL(candidate);
+    } catch (ignored) {
+      return null;
+    }
+
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    if (!/^(?:www\.)?github\.com$/i.test(url.hostname)) return null;
+
+    var parts = url.pathname.split("/").filter(Boolean).map(function (part) {
+      try { return decodeURIComponent(part); } catch (ignored) { return part; }
+    });
+    if (parts.length < 2) return null;
+
+    var owner = parts[0];
+    var repo = parts[1].replace(/\.git$/i, "");
+    if (!owner || !repo) return null;
+
+    return {
+      owner: owner,
+      repo: repo,
+      branch: parts[2] === "tree" && parts.length > 3 ? parts.slice(3).join("/") : null
+    };
+  }
+
+  function encodeGitHubPath(path) {
+    return path.split("/").map(encodeURIComponent).join("/");
+  }
+
+  function explorerUrlFor(repoInfo) {
+    var next = new URL(location.href);
+    next.search = "";
+    next.hash = "";
+    next.searchParams.set("owner", repoInfo.owner);
+    next.searchParams.set("repo", repoInfo.repo);
+    if (repoInfo.branch) next.searchParams.set("branch", repoInfo.branch);
+    return next.href;
+  }
+
+  repoFormEl.addEventListener("submit", function (event) {
+    event.preventDefault();
+    var repoInfo = parseGitHubRepoUrl(repoUrlEl.value);
+    if (!repoInfo) {
+      repoUrlErrorEl.textContent = "Enter a valid GitHub repository link, such as https://github.com/owner/repository.";
+      repoUrlEl.setAttribute("aria-invalid", "true");
+      repoUrlEl.focus();
+      return;
+    }
+    repoUrlErrorEl.textContent = "";
+    repoUrlEl.removeAttribute("aria-invalid");
+    location.assign(explorerUrlFor(repoInfo));
+  });
+
+  repoUrlEl.addEventListener("input", function () {
+    repoUrlErrorEl.textContent = "";
+    repoUrlEl.removeAttribute("aria-invalid");
+  });
 
   var ICONS = {
     folder: '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>',
@@ -1154,22 +1219,25 @@
   var detected = detectRepo();
 
   if (!detected.owner || !detected.repo) {
+    document.getElementById("repoTitle").textContent = "Repository Explorer";
+    document.getElementById("repoDescription").textContent = "Paste a GitHub link or choose a repository below.";
     showTreeError(
-      "No repository specified. Append ?owner=<user>&repo=<name> to the URL " +
-      "(optionally &branch=<branch>)."
+      "Paste a GitHub repository link above, or choose one of the quick links."
     );
   } else {
     OWNER = detected.owner;
     REPO = detected.repo;
     REPO_URL = "https://github.com/" + OWNER + "/" + REPO;
+    repoUrlEl.value = REPO_URL + (detected.branch ? "/tree/" + encodeGitHubPath(detected.branch) : "");
     document.getElementById("githubLink").href = REPO_URL;
 
     fetch("https://api.github.com/repos/" + OWNER + "/" + REPO)
       .then(checkedJson)
       .then(function (info) {
         BRANCH = detected.branch || info.default_branch || "main";
-        RAW_BASE = "https://raw.githubusercontent.com/" + OWNER + "/" + REPO + "/" + BRANCH + "/";
-        API_TREE_URL = "https://api.github.com/repos/" + OWNER + "/" + REPO + "/git/trees/" + BRANCH + "?recursive=1";
+        var encodedBranch = encodeGitHubPath(BRANCH);
+        RAW_BASE = "https://raw.githubusercontent.com/" + OWNER + "/" + REPO + "/" + encodedBranch + "/";
+        API_TREE_URL = "https://api.github.com/repos/" + OWNER + "/" + REPO + "/git/trees/" + encodedBranch + "?recursive=1";
 
         var title = formatTitle(info.name || REPO);
         document.getElementById("repoTitle").textContent = title;
